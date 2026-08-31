@@ -1,5 +1,3 @@
-import { fetchMediaById } from './api';
-
 export interface EpisodeInfo {
   id: string;
   number: number;
@@ -47,7 +45,7 @@ export class AnimeService {
             .map((ep: any, index: number) => ({
               id: String(ep?.id || ep?.episodeId || ''),
               number: Number(ep?.number ?? ep?.episodeNumber ?? index + 1),
-              title: ep?.title || ep?.name || undefined,
+              title: ep?.title || ep?.name || `Episode ${index + 1}`,
               image: ep?.image || ep?.thumbnail || undefined,
             }))
             .filter((ep: EpisodeInfo) => ep.id && Number.isFinite(ep.number))
@@ -82,7 +80,21 @@ export class AnimeService {
 
   static async mapToProvider(anilistId: string): Promise<string | null> {
     try {
-      const media: any = await fetchMediaById(anilistId, 'ANIME');
+      // Already mapped by a provider-aware search result.
+      if (String(anilistId).includes('::')) return String(anilistId);
+
+      const numericId = Number(anilistId);
+      if (!Number.isFinite(numericId)) return null;
+
+      const mediaResponse = await fetch(`/api/anime/resolve?id=${encodeURIComponent(String(numericId))}`, {
+        headers: { Accept: 'application/json' },
+      });
+      const mediaData = await mediaResponse.json().catch(() => ({}));
+      if (mediaResponse.ok && mediaData?.providerId) return String(mediaData.providerId);
+
+      // Compatibility fallback: resolve the AniList title in the browser-side API layer.
+      const { fetchMediaById } = await import('./api');
+      const media: any = await fetchMediaById(String(numericId), 'ANIME');
       const title = media?.title?.english || media?.title?.romaji || media?.title?.native;
       if (!title) return null;
 
