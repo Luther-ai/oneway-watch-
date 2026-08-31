@@ -1,34 +1,57 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import videojs from 'video.js';
+import type Player from 'video.js/dist/types/player';
 
 interface HLSPlayerProps {
   src: string;
   poster?: string;
   className?: string;
-  onError?: (error: any) => void;
+  onError?: (error: string) => void;
   onTimeUpdate?: (currentTime: number, duration: number) => void;
   initialTime?: number;
 }
 
+function getSourceType(src: string) {
+  const lower = src.toLowerCase();
+  if (lower.includes('.m3u8')) return 'application/x-mpegURL';
+  if (lower.includes('.mp4')) return 'video/mp4';
+  return 'video/mp4';
+}
+
 export default function HLSPlayer({ src, poster, className, onError, onTimeUpdate, initialTime }: HLSPlayerProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
-  const playerRef = useRef<any>(null);
+  const playerRef = useRef<Player | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [retrying, setRetrying] = useState(false);
   const hasSeekedInitial = useRef(false);
 
+  const reportError = useCallback((message: string) => {
+    setError(message);
+    onError?.(message);
+  }, [onError]);
+
   useEffect(() => {
-    if (!videoRef.current) return;
+    if (!videoRef.current || playerRef.current) return;
 
-    hasSeekedInitial.current = false;
-
-    // Initialize Video.js player
-    playerRef.current = videojs(videoRef.current, {
+    const sourceType = getSourceType(src);
+    const player = videojs(videoRef.current, {
       controls: true,
-      autoplay: true,
+      autoplay: false,
       preload: 'auto',
       fluid: true,
       responsive: true,
-      playbackRates: [0.5, 1, 1.5, 2],
+      playsinline: true,
+      inactivityTimeout: 1800,
+      playbackRates: [0.5, 0.75, 1, 1.25, 1.5, 2],
+      html5: {
+        vhs: {
+          overrideNative: true,
+          enableLowInitialPlaylist: true,
+          smoothQualityChange: true,
+        },
+        nativeAudioTracks: false,
+        nativeVideoTracks: false,
+      },
       controlBar: {
         children: [
           'playToggle',
@@ -39,79 +62,107 @@ export default function HLSPlayer({ src, poster, className, onError, onTimeUpdat
           'progressControl',
           'remainingTimeDisplay',
           'playbackRateMenuButton',
-          'fullscreenToggle'
-        ]
+          'fullscreenToggle',
+        ],
       },
-      sources: [{
-        src: src,
-        type: 'application/x-mpegURL'
-      }],
-      poster: poster
+      sources: [{ src, type: sourceType }],
+      poster,
     }, () => {
-      console.log('Player is ready');
+      setError(null);
     });
 
-    if (onTimeUpdate) {
-      playerRef.current.on('timeupdate', () => {
-        if (playerRef.current) {
-          const current = playerRef.current.currentTime() || 0;
-          const duration = playerRef.current.duration() || 0;
-          onTimeUpdate(current, duration);
-        }
-      });
-    }
+    playerRef.current = player;
+    hasSeekedInitial.current = false;
 
-    if (initialTime && initialTime > 0) {
-      playerRef.current.on('loadedmetadata', () => {
-        if (!hasSeekedInitial.current && playerRef.current) {
-          hasSeekedInitial.current = true;
-          playerRef.current.currentTime(initialTime);
-        }
-      });
-    }
+    const handleTimeUpdate = () => {
+      const current = player.currentTime() || 0;
+      const duration = player.duration() || 0;
+      onTimeUpdate?.(current, Number.isFinite(duration) ? duration : 0);
+    };
 
-    // Error handling
-    playerRef.current.on('error', (e: any) => {
-      const errorMessage = playerRef.current?.error()?.message || 'Unknown playback error';
-      setError(errorMessage);
-      onError?.(errorMessage);
-      console.error('Video.js error:', errorMessage);
-    });
-
-    // Cleanup
-    return () => {
-      if (playerRef.current) {
-        playerRef.current.dispose();
-        playerRef.current = null;
+    const handleLoadedMetadata = () => {
+      if (hasSeekedInitial.current || !initialTime || initialTime <= 0) return;
+      const duration = player.duration();
+      const safeTime = Number.isFinite(duration) && duration > 0
+        ? Math.min(initialTime, Math.max(0, duration - 1))
+        : initialTime;
+      if (safeTime > 0) {
+        hasSeekedInitial.current = true;
+        player.currentTime(safeTime);
       }
     };
-  }, [src, poster, onError, onTimeUpdate, initialTime]);
 
-  // Update src when prop changes
+    const handlePlayerError = () => {
+      const playerError = player.error();
+      const message = playerError?.message || 'The video source could not be played.';
+      console.error('Video.js playback error:', playerError);
+      reportError(message);
+    };
+
+    player.on('timeupdate', handleTimeUpdate);
+    player.on('loadedmetadata', handleLoadedMetadata);
+    player.on('error', handlePlayerError);
+
+    return () => {
+      player.off('timeupdate', handleTimeUpdate);
+      player.off('loadedmetadata', handleLoadedMetadata);
+      player.off('error', handlePlayerError);
+      player.dispose();
+      playerRef.current = null;
+    };
+  }, [src, poster, initialTime, onTimeUpdate, reportError]);
+
   useEffect(() => {
-    if (playerRef.current) {
-        playerRef.current.src({ src, type: 'application/x-mpegURL' });
-        if(poster) playerRef.current.poster(poster);
-    }
+    const player = playerRef.current;
+    if (!player || !src) return;
+
+    setError(null);
+    setRetrying(false);
+    hasSeekedInitial.current = false;
+    player.src({ src, type: getSourceType(src) });
+    if (poster) player.poster(poster);
+    player.load();
   }, [src, poster]);
+
+  const retry = useCallback(async () => {
+    const player = playerRef.current;
+    if (!player || !src) return;
+
+    setRetrying(true);
+    setError(null);
+    try {
+      player.pause();
+      player.reset();
+      player.src({ src, type: getSourceType(src) });
+      if (poster) player.poster(poster);
+      player.load();
+      await new Promise<void>((resolve) => player.one('loadedmetadata', () => resolve()));
+      await player.play();
+    } catch (retryError: any) {
+      reportError(retryError?.message || 'Retry failed. The source may be unavailable.');
+    } finally {
+      setRetrying(false);
+    }
+  }, [poster, reportError, src]);
 
   if (error) {
     return (
-      <div className="bg-black/80 rounded-xl aspect-video flex flex-col items-center justify-center p-8">
-        <div className="text-red-500 text-xl mb-4">❌ Playback Error</div>
-        <div className="text-gray-300 text-center mb-6">{error}</div>
+      <div className={`bg-black/90 rounded-xl aspect-video flex flex-col items-center justify-center p-8 ${className || ''}`}>
+        <div className="text-red-400 text-xl font-bold mb-3">Playback unavailable</div>
+        <div className="text-gray-300 text-center text-sm max-w-xl mb-6">{error}</div>
         <button
-          onClick={() => window.location.reload()}
-          className="px-6 py-3 bg-purple-600 hover:bg-purple-700 rounded-lg font-semibold transition-colors"
+          onClick={retry}
+          disabled={retrying}
+          className="inline-flex items-center gap-2 px-5 py-3 bg-purple-600 hover:bg-purple-500 disabled:opacity-50 rounded-lg font-semibold transition-colors"
         >
-          Retry
+          {retrying ? 'Retrying…' : 'Retry playback'}
         </button>
       </div>
     );
   }
 
   return (
-    <div className={`rounded-xl overflow-hidden shadow-2xl ${className}`}>
+    <div className={`rounded-xl overflow-hidden shadow-2xl ${className || ''}`}>
       <div data-vjs-player>
         <video
           ref={videoRef}
