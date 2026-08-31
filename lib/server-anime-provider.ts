@@ -5,15 +5,13 @@ export type AnimeProvider = {
   instance: any;
 };
 
-// Consumet has changed provider availability over time. Build the provider
-// list dynamically so a missing/renamed provider cannot crash the API.
 const PROVIDER_NAMES = [
-  'Gogoanime',
   'Hianime',
   'HiAnime',
   'AnimeKai',
   'AnimePahe',
   'KickAssAnime',
+  'Gogoanime',
 ];
 
 export function getAvailableProviders(): AnimeProvider[] {
@@ -33,6 +31,24 @@ export function getAvailableProviders(): AnimeProvider[] {
   return providers;
 }
 
+export function getProvider(name: string | null | undefined): AnimeProvider | null {
+  if (!name) return null;
+  return getAvailableProviders().find((provider) => provider.name.toLowerCase() === name.toLowerCase()) || null;
+}
+
+export function encodeProviderId(provider: string, id: string): string {
+  return `${provider}::${id}`;
+}
+
+export function decodeProviderId(value: string): { provider: string | null; id: string } {
+  const separator = value.indexOf('::');
+  if (separator === -1) return { provider: null, id: value };
+  return {
+    provider: value.slice(0, separator),
+    id: value.slice(separator + 2),
+  };
+}
+
 export async function searchAnimeAcrossProviders(query: string) {
   const errors: string[] = [];
 
@@ -41,7 +57,14 @@ export async function searchAnimeAcrossProviders(query: string) {
       const response: any = await provider.instance.search(query);
       const results = Array.isArray(response?.results) ? response.results : [];
       if (results.length) {
-        return { provider: provider.name, results };
+        return {
+          provider: provider.name,
+          results: results.map((item: any) => ({
+            ...item,
+            id: encodeProviderId(provider.name, String(item?.id || '')),
+          })),
+          errors,
+        };
       }
     } catch (error: any) {
       errors.push(`${provider.name}: ${error?.message || 'request failed'}`);
@@ -51,14 +74,19 @@ export async function searchAnimeAcrossProviders(query: string) {
   return { provider: null, results: [], errors };
 }
 
-export async function fetchAnimeInfoAcrossProviders(id: string) {
+export async function fetchAnimeInfoAcrossProviders(rawId: string) {
+  const decoded = decodeProviderId(rawId);
+  const preferred = getProvider(decoded.provider);
+  const providers = preferred
+    ? [preferred, ...getAvailableProviders().filter((item) => item.name !== preferred.name)]
+    : getAvailableProviders();
   const errors: string[] = [];
 
-  for (const provider of getAvailableProviders()) {
+  for (const provider of providers) {
     try {
-      const info: any = await provider.instance.fetchAnimeInfo(id);
+      const info: any = await provider.instance.fetchAnimeInfo(decoded.id);
       if (info && typeof info === 'object') {
-        return { provider: provider.name, info };
+        return { provider: provider.name, info, errors };
       }
     } catch (error: any) {
       errors.push(`${provider.name}: ${error?.message || 'request failed'}`);
@@ -68,17 +96,22 @@ export async function fetchAnimeInfoAcrossProviders(id: string) {
   return { provider: null, info: null, errors };
 }
 
-export async function fetchEpisodeSourcesAcrossProviders(id: string) {
+export async function fetchEpisodeSourcesAcrossProviders(rawId: string) {
+  const decoded = decodeProviderId(rawId);
+  const preferred = getProvider(decoded.provider);
+  const providers = preferred
+    ? [preferred, ...getAvailableProviders().filter((item) => item.name !== preferred.name)]
+    : getAvailableProviders();
   const errors: string[] = [];
 
-  for (const provider of getAvailableProviders()) {
+  for (const provider of providers) {
     try {
-      const result: any = await provider.instance.fetchEpisodeSources(id);
+      const result: any = await provider.instance.fetchEpisodeSources(decoded.id);
       const sources = Array.isArray(result?.sources)
         ? result.sources.filter((source: any) => source?.url)
         : [];
       if (sources.length) {
-        return { provider: provider.name, sources };
+        return { provider: provider.name, sources, errors };
       }
     } catch (error: any) {
       errors.push(`${provider.name}: ${error?.message || 'request failed'}`);
