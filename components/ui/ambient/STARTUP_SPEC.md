@@ -1,0 +1,1 @@
+Startup spec: 1.2-2.1s cinematic boot, emblem reveal, concentric orbit rings, progress bar, crossfade into app, session-only once per tab, reduced-motion support.
