@@ -49,6 +49,7 @@ export class AnimeService {
               image: ep?.image || ep?.thumbnail || undefined,
             }))
             .filter((ep: EpisodeInfo) => ep.id && Number.isFinite(ep.number))
+            .sort((a: EpisodeInfo, b: EpisodeInfo) => a.number - b.number)
         : [];
 
       return {
@@ -80,27 +81,14 @@ export class AnimeService {
 
   static async mapToProvider(anilistId: string): Promise<string | null> {
     try {
-      // Already mapped by a provider-aware search result.
-      if (String(anilistId).includes('::')) return String(anilistId);
+      const value = String(anilistId);
+      if (value.includes('::')) return value;
 
-      const numericId = Number(anilistId);
+      const numericId = Number(value);
       if (!Number.isFinite(numericId)) return null;
 
-      const mediaResponse = await fetch(`/api/anime/resolve?id=${encodeURIComponent(String(numericId))}`, {
-        headers: { Accept: 'application/json' },
-      });
-      const mediaData = await mediaResponse.json().catch(() => ({}));
-      if (mediaResponse.ok && mediaData?.providerId) return String(mediaData.providerId);
-
-      // Compatibility fallback: resolve the AniList title in the browser-side API layer.
-      const { fetchMediaById } = await import('./api');
-      const media: any = await fetchMediaById(String(numericId), 'ANIME');
-      const title = media?.title?.english || media?.title?.romaji || media?.title?.native;
-      if (!title) return null;
-
-      const results = await this.searchAnime(String(title));
-      const first = Array.isArray(results) ? results[0] : null;
-      return first?.id ? String(first.id) : null;
+      const data = await getJson(`/api/anime/resolve?id=${encodeURIComponent(String(numericId))}`);
+      return data?.providerId ? String(data.providerId) : null;
     } catch (error) {
       console.error('Provider mapping error:', error);
       return null;
