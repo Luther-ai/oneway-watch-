@@ -1,160 +1,108 @@
-import React, { useState, useEffect } from 'react';
-import TiltCard from '../components/ui/TiltCard';
-import { Flame, Search, Loader2, Sparkles } from 'lucide-react';
-import { AnimeService } from '../lib/anime-service';
-import BackButton from '../components/ui/BackButton';
+import React, { useEffect, useMemo, useState } from 'react';
+import { Search, Loader2, Sparkles, Play, ChevronLeft, ChevronRight, SlidersHorizontal } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import TiltCard from '../components/ui/TiltCard';
 import ContinueWatchingSection from '../components/ui/ContinueWatchingSection';
 import ContinueReadingSection from '../components/ui/ContinueReadingSection';
-import { useWatchStore, useMangaStore } from '../lib/store';
+import { fetchAnime, ANIME_SORTS, GENRES } from '../lib/api';
+import { useMangaStore } from '../lib/store';
+import { Media } from '../types';
+
+const titleOf = (item: Media) => item.title.english || item.title.romaji || item.title.native;
 
 export default function AnimeHome() {
-  const [animeList, setAnimeList] = useState<any[]>([]);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [loading, setLoading] = useState(true);
-  const [searchLoading, setSearchLoading] = useState(false);
   const navigate = useNavigate();
-
-  const { continueWatching } = useWatchStore();
+  const [animeList, setAnimeList] = useState<Media[]>([]);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [genre, setGenre] = useState('');
+  const [sort, setSort] = useState('TRENDING_DESC');
+  const [page, setPage] = useState(1);
+  const [loading, setLoading] = useState(true);
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const { continueReading } = useMangaStore();
 
-  // Load trending anime on mount
-  useEffect(() => {
-    loadTrending();
-  }, []);
-
-  const loadTrending = async () => {
+  const loadAnime = async () => {
     setLoading(true);
-    try {
-      // Search for popular anime to show as trending
-      const results = await AnimeService.searchAnime('top airing');
-      setAnimeList(results.slice(0, 24));
-    } catch (error) {
-      console.error('Error loading trending:', error);
-    } finally {
-      setLoading(false);
-    }
+    const results = await fetchAnime(sort, searchQuery || undefined, genre || undefined, page);
+    setAnimeList(results);
+    setLoading(false);
   };
 
-  const handleSearch = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!searchQuery.trim()) {
-      loadTrending();
-      return;
-    }
+  useEffect(() => { loadAnime(); }, [sort, genre, page]);
 
-    setSearchLoading(true);
-    try {
-      const results = await AnimeService.searchAnime(searchQuery);
-      setAnimeList(results.slice(0, 24));
-    } catch (error) {
-      console.error('Search error:', error);
-    } finally {
-      setSearchLoading(false);
-    }
+  const hero = useMemo(() => animeList.find(a => a.bannerImage) || animeList[0], [animeList]);
+
+  const search = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setPage(1);
+    await loadAnime();
   };
 
   return (
-    <div className="min-h-screen p-6 md:p-12 pl-4 md:pl-24 pt-20 pb-24 max-w-[1800px] mx-auto">
-      
-      {/* Header & Search Bar */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-8">
-        <div className="flex items-center gap-3">
-          <Flame className="text-purple-500" size={32} />
-          <div>
-            <h1 className="text-3xl font-black text-white leading-none">
-              ANIME <span className="text-purple-500">STREAM</span>
-            </h1>
-            <p className="text-xs text-gray-400 font-medium mt-1">Watch trending anime & track your progress</p>
-          </div>
-        </div>
-
-        <form onSubmit={handleSearch} className="w-full md:w-96">
-          <div className="relative">
-            <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-500 w-5 h-5" />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search anime by title..."
-              className="w-full pl-12 pr-24 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500 text-sm transition-all"
-            />
-            <button
-              type="submit"
-              disabled={searchLoading}
-              className="absolute right-2 top-1/2 transform -translate-y-1/2 px-4 py-1.5 bg-purple-600 hover:bg-purple-700 rounded-lg text-xs font-bold text-white disabled:opacity-50 transition-colors"
-            >
-              {searchLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Search'}
+    <main className="min-h-screen pl-4 md:pl-24 pt-16 pb-24">
+      {hero && !searchQuery && page === 1 && (
+        <section className="relative mx-4 md:mx-8 max-w-[1700px] h-[440px] md:h-[560px] overflow-hidden rounded-[28px] border border-white/10 bg-[#0d0d12]">
+          <img src={hero.bannerImage || hero.coverImage.extraLarge} alt="" className="absolute inset-0 h-full w-full object-cover opacity-65" />
+          <div className="hero-fade absolute inset-0" />
+          <div className="relative z-10 flex h-full max-w-2xl flex-col justify-end p-7 md:p-12">
+            <div className="mb-3 flex items-center gap-2 text-xs font-bold uppercase tracking-[.2em] text-violet-300">
+              <Sparkles size={14} /> Featured anime
+            </div>
+            <h1 className="text-4xl md:text-6xl font-black tracking-tight text-white">{titleOf(hero)}</h1>
+            <div className="mt-4 flex flex-wrap gap-2 text-xs text-white/70">
+              {hero.format && <span className="rounded-full bg-white/10 px-3 py-1">{hero.format}</span>}
+              {hero.averageScore > 0 && <span className="rounded-full bg-white/10 px-3 py-1">★ {(hero.averageScore / 10).toFixed(1)}</span>}
+              {hero.episodes && <span className="rounded-full bg-white/10 px-3 py-1">{hero.episodes} episodes</span>}
+            </div>
+            <p className="mt-4 line-clamp-3 max-w-xl text-sm leading-6 text-white/70" dangerouslySetInnerHTML={{ __html: hero.description || 'Discover your next series.' }} />
+            <button onClick={() => navigate(`/anime/watch/${hero.id}`)} className="mt-6 flex w-fit items-center gap-2 rounded-xl bg-white px-5 py-3 text-sm font-extrabold text-black transition hover:scale-[1.02]">
+              <Play size={17} fill="currentColor" /> Start watching
             </button>
           </div>
-        </form>
-      </div>
-
-      {/* Continue Watching Section */}
-      <ContinueWatchingSection />
-
-      {/* Continue Reading Section (if any manga was read) */}
-      {continueReading.length > 0 && (
-        <ContinueReadingSection />
+        </section>
       )}
 
-      {/* Trending / Search Results Header */}
-      <div className="flex items-center justify-between mb-6">
-        <div className="flex items-center gap-2.5">
-          <Sparkles className="w-5 h-5 text-purple-400" />
-          <h2 className="text-xl md:text-2xl font-black text-white tracking-tight">
-            {searchQuery ? `Search Results for "${searchQuery}"` : 'Trending Anime'}
-          </h2>
+      <section className="mx-4 md:mx-8 mt-8 max-w-[1700px]">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-[.2em] text-violet-400">OneWay Watch</p>
+            <h2 className="mt-1 text-3xl font-black text-white">Anime</h2>
+            <p className="mt-1 text-sm text-white/45">Discover, watch and keep your progress synced locally.</p>
+          </div>
+          <form onSubmit={search} className="w-full lg:w-[430px]">
+            <div className="relative">
+              <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-white/35" size={18} />
+              <input value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="Search anime..." className="w-full rounded-2xl border border-white/10 bg-white/[.04] py-3 pl-11 pr-24 text-sm text-white outline-none transition focus:border-violet-500/60" />
+              <button className="absolute right-2 top-1/2 -translate-y-1/2 rounded-xl bg-violet-600 px-4 py-2 text-xs font-bold">Search</button>
+            </div>
+          </form>
         </div>
-        {searchQuery && (
-          <button
-            onClick={() => {
-              setSearchQuery('');
-              loadTrending();
-            }}
-            className="text-xs text-purple-400 hover:text-purple-300 font-semibold"
-          >
-            Clear Search
-          </button>
-        )}
-      </div>
 
-      {/* Anime Grid */}
-      {loading ? (
-        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-6">
-          {[...Array(12)].map((_, i) => (
-            <div key={i} className="aspect-[2/3] bg-[#111] animate-pulse rounded-xl border border-white/5" />
-          ))}
+        <ContinueWatchingSection />
+        {continueReading.length > 0 && <ContinueReadingSection />}
+
+        <div className="mt-10 flex flex-wrap items-center gap-3">
+          <button onClick={() => setFiltersOpen(v => !v)} className="flex items-center gap-2 rounded-xl border border-white/10 bg-white/[.04] px-4 py-2.5 text-xs font-bold text-white/80"><SlidersHorizontal size={15}/> Filters</button>
+          <div className="flex max-w-full gap-2 overflow-x-auto no-scrollbar">
+            {ANIME_SORTS.map(option => <button key={option.value} onClick={() => { setSort(option.value); setPage(1); }} className={`whitespace-nowrap rounded-xl px-4 py-2.5 text-xs font-bold transition ${sort === option.value ? 'bg-violet-600 text-white' : 'bg-white/[.04] text-white/55 hover:bg-white/[.08]'}`}>{option.label}</button>)}
+          </div>
         </div>
-      ) : animeList.length === 0 ? (
-        <div className="text-center py-20 bg-white/5 rounded-2xl border border-white/5 p-8">
-          <p className="text-gray-400 text-lg mb-4">No anime found matching your query.</p>
-          <button
-            onClick={() => {
-              setSearchQuery('');
-              loadTrending();
-            }}
-            className="px-6 py-2.5 bg-purple-600 hover:bg-purple-700 rounded-xl font-bold text-sm text-white transition-colors"
-          >
-            Back to Trending
-          </button>
+
+        {filtersOpen && <div className="mt-3 flex flex-wrap gap-2 rounded-2xl border border-white/10 bg-white/[.025] p-4">
+          <button onClick={() => { setGenre(''); setPage(1); }} className={`rounded-lg px-3 py-2 text-xs ${!genre ? 'bg-white text-black' : 'bg-white/5 text-white/60'}`}>All genres</button>
+          {GENRES.map(g => <button key={g} onClick={() => { setGenre(g); setPage(1); }} className={`rounded-lg px-3 py-2 text-xs ${genre === g ? 'bg-violet-600 text-white' : 'bg-white/5 text-white/60 hover:bg-white/10'}`}>{g}</button>)}
+        </div>}
+
+        <div className="mt-7 flex items-center justify-between">
+          <h3 className="text-xl font-black text-white">{searchQuery ? `Results for “${searchQuery}”` : genre || 'Discover anime'}</h3>
+          <div className="flex gap-2">
+            <button disabled={page === 1 || loading} onClick={() => setPage(p => p - 1)} className="rounded-lg bg-white/5 p-2 disabled:opacity-25"><ChevronLeft size={17}/></button>
+            <button disabled={animeList.length < 24 || loading} onClick={() => setPage(p => p + 1)} className="rounded-lg bg-white/5 p-2 disabled:opacity-25"><ChevronRight size={17}/></button>
+          </div>
         </div>
-      ) : (
-        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-6">
-          {animeList.map((item) => (
-            <TiltCard
-              key={item.id}
-              image={item.image}
-              title={item.title?.english || item.title?.romaji || item.title}
-              badge={item.subOrDub ? item.subOrDub.toUpperCase() : undefined}
-              color="#9333ea"
-              onClick={() => {
-                navigate(`/anime/watch/${item.id}`); 
-              }}
-            />
-          ))}
-        </div>
-      )}
-    </div>
+
+        {loading ? <div className="mt-6 grid grid-cols-2 gap-4 md:grid-cols-4 lg:grid-cols-6">{Array.from({length:12}).map((_,i) => <div key={i} className="aspect-[2/3] animate-pulse rounded-2xl bg-white/[.04]" />)}</div> : animeList.length === 0 ? <div className="mt-6 rounded-2xl border border-white/10 bg-white/[.03] py-20 text-center text-white/45">No anime found. Try another title or genre.</div> : <div className="mt-6 grid grid-cols-2 gap-4 md:grid-cols-4 lg:grid-cols-6">{animeList.map(item => <TiltCard key={item.id} image={item.coverImage.extraLarge || item.coverImage.large} title={titleOf(item)} badge={item.episodes ? `${item.episodes} EPS` : item.format} color="#8b5cf6" onClick={() => navigate(`/anime/watch/${item.id}`)} />)}</div>}
+      </section>
+    </main>
   );
 }
