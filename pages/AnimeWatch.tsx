@@ -15,6 +15,7 @@ import {
   ChevronRight,
   Clock,
   Info,
+  SkipForward,
 } from 'lucide-react';
 
 export default function AnimeWatchPage() {
@@ -57,6 +58,7 @@ export default function AnimeWatchPage() {
 
     setCurrentEpisode(episode);
     setSelectedEpisodeNum(episode.number);
+    setInitialSeekTime(undefined);
 
     const info = animeData || animeInfo;
     if (id && info) {
@@ -84,6 +86,30 @@ export default function AnimeWatchPage() {
     }
   }, [id, currentEpisode, updateWatchTime]);
 
+  const navigateEpisode = useCallback((direction: 'prev' | 'next') => {
+    const episodes = animeInfo?.episodes ?? [];
+    if (!episodes.length) return;
+
+    const currentIndex = episodes.findIndex(ep => ep.number === selectedEpisodeNum);
+    if (currentIndex < 0) return;
+
+    const nextIndex = direction === 'prev' ? currentIndex - 1 : currentIndex + 1;
+    if (nextIndex >= 0 && nextIndex < episodes.length) {
+      void handleEpisodeSelect(episodes[nextIndex]);
+    }
+  }, [animeInfo, selectedEpisodeNum, handleEpisodeSelect]);
+
+  const handleEpisodeEnded = useCallback(() => {
+    const episodes = animeInfo?.episodes ?? [];
+    const currentIndex = episodes.findIndex(ep => ep.number === selectedEpisodeNum);
+    if (currentIndex < 0 || currentIndex >= episodes.length - 1) return;
+
+    const nextEpisode = episodes[currentIndex + 1];
+    setPlayerError('');
+    setInitialSeekTime(undefined);
+    void handleEpisodeSelect(nextEpisode);
+  }, [animeInfo, selectedEpisodeNum, handleEpisodeSelect]);
+
   useEffect(() => {
     let cancelled = false;
 
@@ -95,12 +121,9 @@ export default function AnimeWatchPage() {
 
         if (!id) throw new Error('No anime ID provided.');
 
-        // The catalog uses AniList IDs. Resolve that title to a playback-provider ID.
         let providerId = await AnimeService.mapToProvider(String(id));
 
         if (!providerId) {
-          // Provider failure should not destroy the page. Keep the AniList metadata
-          // visible and tell the user that playback is temporarily unavailable.
           const media: any = await fetchMediaById(String(id), 'ANIME');
           if (!cancelled && media) {
             const fallback: AnimeInfo = {
@@ -164,29 +187,16 @@ export default function AnimeWatchPage() {
       }
     }
 
-    loadAnimeData();
+    void loadAnimeData();
     return () => { cancelled = true; };
   }, [id, searchParams, getLastWatchedEpisode, handleEpisodeSelect]);
-
-  const navigateEpisode = useCallback((direction: 'prev' | 'next') => {
-    const episodes = animeInfo?.episodes ?? [];
-    if (!episodes.length) return;
-
-    const currentIndex = episodes.findIndex(ep => ep.number === selectedEpisodeNum);
-    if (currentIndex < 0) return;
-
-    const nextIndex = direction === 'prev' ? currentIndex - 1 : currentIndex + 1;
-    if (nextIndex >= 0 && nextIndex < episodes.length) {
-      handleEpisodeSelect(episodes[nextIndex]);
-    }
-  }, [animeInfo, selectedEpisodeNum, handleEpisodeSelect]);
 
   const handlePlayerError = useCallback((error: string) => {
     setPlayerError(`Player error: ${error}`);
   }, []);
 
   const handleRetry = useCallback(() => {
-    if (currentEpisode?.id) loadStream(currentEpisode.id);
+    if (currentEpisode?.id) void loadStream(currentEpisode.id);
   }, [currentEpisode, loadStream]);
 
   if (loading) {
@@ -200,6 +210,7 @@ export default function AnimeWatchPage() {
 
   const episodes = animeInfo?.episodes ?? [];
   const providerUnavailable = Boolean(animeInfo?.providerUnavailable);
+  const isLastEpisode = episodes.length > 0 && selectedEpisodeNum >= episodes[episodes.length - 1].number;
 
   return (
     <div className="min-h-screen pt-20 pb-10 px-4 md:px-8 max-w-[1800px] mx-auto">
@@ -232,6 +243,7 @@ export default function AnimeWatchPage() {
                 className="w-full h-full"
                 onError={handlePlayerError}
                 onTimeUpdate={handleTimeUpdate}
+                onEnded={handleEpisodeEnded}
                 initialTime={initialSeekTime}
               />
             ) : (
@@ -252,6 +264,16 @@ export default function AnimeWatchPage() {
             )}
           </div>
 
+          {!isLastEpisode && currentEpisode && streamUrl && (
+            <button
+              onClick={() => navigateEpisode('next')}
+              className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-white font-semibold transition-colors"
+            >
+              <SkipForward className="w-4 h-4 text-purple-400" />
+              Next Episode
+            </button>
+          )}
+
           <div className="bg-[#111] p-6 rounded-xl border border-white/5">
             <div className="flex items-center justify-between mb-6">
               <div className="flex items-center gap-4">
@@ -263,7 +285,7 @@ export default function AnimeWatchPage() {
                 <button onClick={() => navigateEpisode('prev')} disabled={!episodes.length || selectedEpisodeNum <= 1} className="px-4 py-2 bg-white/5 hover:bg-white/10 rounded-lg disabled:opacity-30 transition-colors" title="Previous Episode">
                   <ChevronLeft className="w-5 h-5" />
                 </button>
-                <button onClick={() => navigateEpisode('next')} disabled={!episodes.length || selectedEpisodeNum >= (animeInfo?.totalEpisodes || 0)} className="px-4 py-2 bg-white/5 hover:bg-white/10 rounded-lg disabled:opacity-30 transition-colors" title="Next Episode">
+                <button onClick={() => navigateEpisode('next')} disabled={!episodes.length || isLastEpisode} className="px-4 py-2 bg-white/5 hover:bg-white/10 rounded-lg disabled:opacity-30 transition-colors" title="Next Episode">
                   <ChevronRight className="w-5 h-5" />
                 </button>
               </div>
@@ -274,7 +296,7 @@ export default function AnimeWatchPage() {
                 {episodes.map((episode) => (
                   <button
                     key={episode.id}
-                    onClick={() => handleEpisodeSelect(episode)}
+                    onClick={() => void handleEpisodeSelect(episode)}
                     className={`aspect-square rounded-lg flex flex-col items-center justify-center transition-all ${selectedEpisodeNum === episode.number ? 'bg-purple-600 text-white scale-105 shadow-lg shadow-purple-600/30 font-black' : 'bg-white/5 text-gray-400 hover:bg-white/10 hover:text-white'}`}
                   >
                     <span className="text-lg font-bold">{episode.number}</span>
