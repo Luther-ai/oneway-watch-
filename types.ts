@@ -34,21 +34,21 @@ export interface Chapter {
 }
 
 export interface ContinueWatchingItem {
-  id: string; // Anime ID (or provider ID / anilist ID)
+  id: string;
   title: string;
   image: string;
   episodeId: string;
   episodeNumber: number;
   episodeTitle?: string;
   totalEpisodes?: number;
-  progressPercent?: number; // 0 to 100
+  progressPercent?: number;
   currentTime?: number;
   duration?: number;
-  updatedAt: number; // Date.now() timestamp
+  updatedAt: number;
 }
 
 export interface ContinueReadingItem {
-  id: string | number; // Manga ID (AniList or MangaDex)
+  id: string | number;
   title: string;
   coverImage: string;
   chapterId: string;
@@ -57,5 +57,21 @@ export interface ContinueReadingItem {
   totalChapters?: number | null;
   page?: number;
   totalPages?: number;
-  updatedAt: number; // Date.now() timestamp
+  updatedAt: number;
+}
+
+export interface AnimeInfo {
+  id: string;
+  title: string;
+  image: string;
+  description?: string;
+  totalEpisodes: number;
+  episodes: Array<{
+    id: string;
+    number: number;
+    title?: string;
+    image?: string;
+  }>;
+  provider?: string | null;
+  providerUnavailable?: boolean;
 }
