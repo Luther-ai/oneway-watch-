@@ -1,0 +1,1 @@
+OneWay Watch UI: dark cinematic base, ivory text, violet accent, circular ornamental geometry, subtle grain/grid, spring motion, reduced-motion support.
