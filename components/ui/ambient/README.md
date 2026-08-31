@@ -1,0 +1,1 @@
+Reserved for reusable ambient UI effects: particles, grain, glow, and motion primitives.
