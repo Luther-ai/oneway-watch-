@@ -8,6 +8,7 @@ interface HLSPlayerProps {
   className?: string;
   onError?: (error: string) => void;
   onTimeUpdate?: (currentTime: number, duration: number) => void;
+  onEnded?: () => void;
   initialTime?: number;
 }
 
@@ -18,7 +19,7 @@ function getSourceType(src: string) {
   return 'video/mp4';
 }
 
-export default function HLSPlayer({ src, poster, className, onError, onTimeUpdate, initialTime }: HLSPlayerProps) {
+export default function HLSPlayer({ src, poster, className, onError, onTimeUpdate, onEnded, initialTime }: HLSPlayerProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const playerRef = useRef<Player | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -33,7 +34,6 @@ export default function HLSPlayer({ src, poster, className, onError, onTimeUpdat
   useEffect(() => {
     if (!videoRef.current || playerRef.current) return;
 
-    const sourceType = getSourceType(src);
     const player = videojs(videoRef.current, {
       controls: true,
       autoplay: false,
@@ -65,7 +65,7 @@ export default function HLSPlayer({ src, poster, className, onError, onTimeUpdat
           'fullscreenToggle',
         ],
       },
-      sources: [{ src, type: sourceType }],
+      sources: [{ src, type: getSourceType(src) }],
       poster,
     }, () => {
       setError(null);
@@ -102,15 +102,17 @@ export default function HLSPlayer({ src, poster, className, onError, onTimeUpdat
     player.on('timeupdate', handleTimeUpdate);
     player.on('loadedmetadata', handleLoadedMetadata);
     player.on('error', handlePlayerError);
+    player.on('ended', onEnded || (() => undefined));
 
     return () => {
       player.off('timeupdate', handleTimeUpdate);
       player.off('loadedmetadata', handleLoadedMetadata);
       player.off('error', handlePlayerError);
+      if (onEnded) player.off('ended', onEnded);
       player.dispose();
       playerRef.current = null;
     };
-  }, [src, poster, initialTime, onTimeUpdate, reportError]);
+  }, [src, poster, initialTime, onTimeUpdate, onEnded, reportError]);
 
   useEffect(() => {
     const player = playerRef.current;
@@ -164,11 +166,7 @@ export default function HLSPlayer({ src, poster, className, onError, onTimeUpdat
   return (
     <div className={`rounded-xl overflow-hidden shadow-2xl ${className || ''}`}>
       <div data-vjs-player>
-        <video
-          ref={videoRef}
-          className="video-js vjs-big-play-centered vjs-default-skin"
-          playsInline
-        />
+        <video ref={videoRef} className="video-js vjs-big-play-centered vjs-default-skin" playsInline />
       </div>
     </div>
   );
