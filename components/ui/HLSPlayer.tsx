@@ -1,6 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import videojs from 'video.js';
-import type Player from 'video.js/dist/types/player';
 
 interface HLSPlayerProps {
   src: string;
@@ -21,7 +20,7 @@ function getSourceType(src: string) {
 
 export default function HLSPlayer({ src, poster, className, onError, onTimeUpdate, onEnded, initialTime }: HLSPlayerProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
-  const playerRef = useRef<Player | null>(null);
+  const playerRef = useRef<any>(null);
   const [error, setError] = useState<string | null>(null);
   const [retrying, setRetrying] = useState(false);
   const hasSeekedInitial = useRef(false);
@@ -102,7 +101,7 @@ export default function HLSPlayer({ src, poster, className, onError, onTimeUpdat
     player.on('timeupdate', handleTimeUpdate);
     player.on('loadedmetadata', handleLoadedMetadata);
     player.on('error', handlePlayerError);
-    player.on('ended', onEnded || (() => undefined));
+    if (onEnded) player.on('ended', onEnded);
 
     return () => {
       player.off('timeupdate', handleTimeUpdate);
