@@ -1,11 +1,13 @@
 import { fetchAnimeInfoAcrossProviders } from '../../lib/server-anime-provider';
 
-function normalizeEpisode(ep: any, index: number) {
+function normalizeEpisode(ep: any, index: number, fallbackImage = '') {
+  const id = String(ep?.id || ep?.episodeId || '');
+  const number = Number(ep?.number ?? ep?.episodeNumber ?? index + 1);
   return {
-    id: String(ep?.id || ep?.episodeId || ''),
-    number: Number(ep?.number ?? ep?.episodeNumber ?? index + 1),
-    title: ep?.title || ep?.name || undefined,
-    image: ep?.image || ep?.thumbnail || undefined,
+    id,
+    number,
+    title: ep?.title || ep?.name || `Episode ${index + 1}`,
+    image: ep?.image || ep?.thumbnail || fallbackImage || undefined,
   };
 }
 
@@ -25,7 +27,7 @@ export default async function handler(req: any, res: any) {
         id,
         title: id,
         image: '',
-        description: 'The anime metadata provider is temporarily unavailable.',
+        description: 'The anime provider is temporarily unavailable. Try another source or retry shortly.',
         totalEpisodes: 0,
         episodes: [],
         provider: null,
@@ -37,11 +39,14 @@ export default async function handler(req: any, res: any) {
       ? info.episodes
       : Array.isArray(info.episodesList)
         ? info.episodesList
-        : [];
+        : Array.isArray(info.results)
+          ? info.results
+          : [];
 
     const episodes = rawEpisodes
-      .map(normalizeEpisode)
-      .filter((ep: any) => ep.id && Number.isFinite(ep.number));
+      .map((ep: any, index: number) => normalizeEpisode(ep, index, info.image || info.cover || ''))
+      .filter((ep: any) => ep.id && Number.isFinite(ep.number))
+      .sort((a: any, b: any) => a.number - b.number);
 
     return res.status(200).json({
       id: String(info.id || id),
