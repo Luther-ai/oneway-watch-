@@ -1,0 +1,1 @@
+Visual direction: cinematic dark UI, violet ambient glow, circular emblem language, fast spring transitions, subtle grid/noise, immersive startup experience.
