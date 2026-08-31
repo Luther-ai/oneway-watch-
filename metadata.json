@@ -1,0 +1,8 @@
+{
+  "name": "AnimeMangaHub",
+  "description": "A comprehensive anime streaming and manga reading application featuring real-time data from AniList and MangaDex, with continue watching and reading progress tracking.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
