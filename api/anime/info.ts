@@ -1,10 +1,12 @@
-import { fetchAnimeInfoAcrossProviders } from '../../lib/server-anime-provider';
+import { encodeProviderId, fetchAnimeInfoAcrossProviders } from '../../lib/server-anime-provider';
 
-function normalizeEpisode(ep: any, index: number, fallbackImage = '') {
-  const id = String(ep?.id || ep?.episodeId || '');
+function normalizeEpisode(ep: any, index: number, provider: string | null, fallbackImage = '') {
+  const rawId = String(ep?.id || ep?.episodeId || '');
   const number = Number(ep?.number ?? ep?.episodeNumber ?? index + 1);
   return {
-    id,
+    // Keep the provider attached to the episode ID so playback uses the same provider
+    // that returned the episode instead of guessing across unrelated providers.
+    id: rawId && provider ? encodeProviderId(provider, rawId) : rawId,
     number,
     title: ep?.title || ep?.name || `Episode ${index + 1}`,
     image: ep?.image || ep?.thumbnail || fallbackImage || undefined,
@@ -44,7 +46,7 @@ export default async function handler(req: any, res: any) {
           : [];
 
     const episodes = rawEpisodes
-      .map((ep: any, index: number) => normalizeEpisode(ep, index, info.image || info.cover || ''))
+      .map((ep: any, index: number) => normalizeEpisode(ep, index, result.provider, info.image || info.cover || ''))
       .filter((ep: any) => ep.id && Number.isFinite(ep.number))
       .sort((a: any, b: any) => a.number - b.number);
 
