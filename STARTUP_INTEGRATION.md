@@ -1,0 +1,1 @@
+The startup experience component is available at components/ui/StartupExperience.tsx. Import it in App.tsx and render <StartupExperience /> above the Sidebar to show it globally.
